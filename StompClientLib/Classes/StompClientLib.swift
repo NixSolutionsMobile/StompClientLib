@@ -80,6 +80,7 @@ public class StompClientLib: NSObject, SRWebSocketDelegate {
     public var connection: Bool = false
     public var certificateCheckEnabled = true
     private var urlRequest: NSURLRequest?
+    private var pingTimer: Timer?
     
     private var reconnectTimer : Timer?
     
@@ -198,12 +199,22 @@ public class StompClientLib: NSObject, SRWebSocketDelegate {
     
     public func webSocketDidOpen(_ webSocket: SRWebSocket!) {
         print("WebSocket is connected")
+
+        DispatchQueue.main.async(execute: {
+            if self.pingTimer == nil {
+                self.pingTimer = Timer.scheduledTimer(timeInterval: 10, target: self, selector: #selector(self.ping), userInfo: nil, repeats: true)
+            }
+        })
+
         connect()
     }
     
     public func webSocket(_ webSocket: SRWebSocket!, didFailWithError error: Error!) {
         print("didFailWithError: \(String(describing: error))")
-        
+
+        self.pingTimer?.invalidate()
+        self.pingTimer = nil
+
         if let delegate = delegate {
             DispatchQueue.main.async(execute: {
                 delegate.serverDidSendError(client: self, withErrorMessage: error.localizedDescription, detailedErrorMessage: error as? String)
@@ -213,6 +224,10 @@ public class StompClientLib: NSObject, SRWebSocketDelegate {
     
     public func webSocket(_ webSocket: SRWebSocket!, didCloseWithCode code: Int, reason: String!, wasClean: Bool) {
         print("didCloseWithCode \(code), reason: \(String(describing: reason))")
+
+        self.pingTimer?.invalidate()
+        self.pingTimer = nil
+
         if let delegate = delegate {
             DispatchQueue.main.async(execute: {
                 delegate.stompClientDidDisconnect(client: self)
@@ -441,6 +456,17 @@ public class StompClientLib: NSObject, SRWebSocketDelegate {
         headerToSend[StompCommands.commandHeaderMessageId] = messageId
         headerToSend[StompCommands.commandHeaderSubscription] = subscription
         sendFrame(command: StompCommands.commandAck, header: headerToSend, body: nil)
+    }
+
+    @objc public func ping() {
+        // Ping from the server
+        socket?.send(StompCommands.commandPing)
+
+        if let delegate = delegate {
+            DispatchQueue.main.async(execute: {
+                delegate.serverDidSendPing()
+            })
+        }
     }
     
     /*
