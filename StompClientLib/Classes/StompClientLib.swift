@@ -473,6 +473,10 @@ public class StompClientLib: NSObject, SRWebSocketDelegate {
      Main Disconnection Method to close the socket
      */
     public func disconnect() {
+
+        self.pingTimer?.invalidate()
+        self.pingTimer = nil
+        
         connection = false
         var headerToSend = [String: String]()
         headerToSend[StompCommands.commandDisconnect] = String(Int(NSDate().timeIntervalSince1970))
